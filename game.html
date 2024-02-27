@@ -5,13 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Uçak Oyunu</title>
 <style>
-  body {
+  body, html {
     margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
     overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: skyblue;
   }
   canvas {
-    display: block;
-    background-color: skyblue;
+    image-rendering: pixelated;
   }
   .menu {
     position: absolute;
@@ -24,7 +30,7 @@
 </style>
 </head>
 <body>
-<canvas id="gameCanvas" width="800" height="600"></canvas>
+<canvas id="gameCanvas"></canvas>
 <div class="menu">
   <h1>Oyun Bitti!</h1>
   <button id="restartButton">Tekrar Oyna</button>
@@ -43,41 +49,46 @@
 <script>
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
-  const planeWidths = [60, 80, 100, 120]; // Uçağın farklı genişlikleri
-  const planeHeight = 20;
-  let planeX = canvas.width / 2 - planeWidths[0] / 2;
-  let planeY = canvas.height - planeHeight - 10;
-  const planeSpeed = 5;
-  const cloudRadius = 20;
+  const initialCanvasWidth = 800;
+  const initialCanvasHeight = 600;
+  const planeWidth = 40; // Uçağın genişliği
+  const planeHeight = 16; // Uçağın yüksekliği
+  let planeX = canvas.width / 2 - planeWidth / 2;
+  let planeY = canvas.height - planeHeight - 60;
+  const planeSpeed = 2;
+  const cloudRadius = 20; // Bulutların boyutu
+  const redCloudRadius = 30; // Kırmızı bulutun boyutu
+  const redCloudProbability = 400; // Her 400 bulutta bir kırmızı bulut oluşturulacak
+  const magnetForce = 4; // Mıknatıs etkisi hızı
   let clouds = [];
   let gameRunning = true;
   let score = 0;
   let difficultyLevel = 3;
   let cloudDensity = 3;
-  let planeIndex = 0; // Uçağın genişliklerinin dizideki indeksi
+  let isMagnetActive = false; // Mıknatıs etkisinin aktif olup olmadığını belirtir
 
   function drawPlane() {
     ctx.fillStyle = "black";
     ctx.beginPath();
     ctx.moveTo(planeX, planeY);
-    ctx.lineTo(planeX + planeWidths[planeIndex] / 2, planeY - planeHeight);
-    ctx.lineTo(planeX + planeWidths[planeIndex], planeY);
+    ctx.lineTo(planeX + planeWidth / 2, planeY - planeHeight);
+    ctx.lineTo(planeX + planeWidth, planeY);
     ctx.closePath();
     ctx.fill();
   }
 
   function movePlane() {
     if (isPlaneMovingLeft && planeX > 0) {
-      planeX -= planeSpeed;
+      planeX -= planeSpeed + planeSpeed * 0.2; // Uçağın hareket hassasiyeti 2 katına çıkarıldı
     }
-    if (isPlaneMovingRight && planeX < canvas.width - planeWidths[planeIndex]) {
-      planeX += planeSpeed;
+    if (isPlaneMovingRight && planeX < canvas.width - planeWidth) {
+      planeX += planeSpeed + planeSpeed * 0.2; // Uçağın hareket hassasiyeti 2 katına çıkarıldı
     }
     if (isPlaneMovingUp && planeY > 0) {
-      planeY -= planeSpeed;
+      planeY -= planeSpeed + planeSpeed * 0.2; // Uçağın hareket hassasiyeti 2 katına çıkarıldı
     }
     if (isPlaneMovingDown && planeY < canvas.height - planeHeight) {
-      planeY += planeSpeed;
+      planeY += planeSpeed + planeSpeed * 0.2; // Uçağın hareket hassasiyeti 2 katına çıkarıldı
     }
   }
 
@@ -85,73 +96,77 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
-  function drawCloud(x, y) {
-    ctx.fillStyle = "white";
+  function drawCloud(x, y, isRed) {
+    ctx.fillStyle = isRed ? "red" : "white";
     ctx.beginPath();
-    ctx.arc(x, y, cloudRadius, 0, Math.PI * 2);
+    ctx.arc(x, y, isRed ? redCloudRadius : cloudRadius, 0, Math.PI * 2);
     ctx.fill();
   }
 
   function moveClouds() {
     for (let i = 0; i < clouds.length; i++) {
-      clouds[i].y += difficultyLevel / 2;
+      if (isMagnetActive && !clouds[i].isRed) {
+        // Eğer mıknatıs etkisi aktifse ve bulut kırmızı değilse
+        const dx = clouds[i].x - planeX;
+        const dy = clouds[i].y - planeY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const forceX = magnetForce * dx / distance;
+        const forceY = magnetForce * dy / distance;
+        clouds[i].x += forceX;
+        clouds[i].y += forceY;
+      } else {
+        clouds[i].y += difficultyLevel / 2;
+      }
       if (clouds[i].y > canvas.height) {
         clouds[i].y = 0;
         clouds[i].x = Math.random() * canvas.width;
+        if (score % redCloudProbability === 0) {
+          // Her 400 bulutta bir kırmızı bulut oluştur
+          createRedCloud();
+        }
         score++;
         document.getElementById("score").innerText = "Skor: " + score;
-        checkPlaneUpgrade();
       }
-      if (clouds[i].x > planeX && clouds[i].x < planeX + planeWidths[planeIndex] &&
+      if (clouds[i].x > planeX && clouds[i].x < planeX + planeWidth &&
           clouds[i].y > planeY && clouds[i].y < planeY + planeHeight) {
-        endGame();
-        return;
+        if (clouds[i].isRed) {
+          // Eğer kırmızı buluta dokunulduysa
+          isMagnetActive = true; // Mıknatıs etkisini aktifleştir
+          setTimeout(() => {
+            isMagnetActive = false; // 3 saniye sonra mıknatıs pasif hale gelir
+          }, 3000);
+        } else {
+          endGame();
+          return;
+        }
       }
     }
   }
 
   function drawClouds() {
     for (let i = 0; i < clouds.length; i++) {
-      drawCloud(clouds[i].x, clouds[i].y);
+      drawCloud(clouds[i].x, clouds[i].y, clouds[i].isRed);
     }
   }
 
-  function restartGame() {
-    gameRunning = true;
-    score = 0;
-    planeIndex = 0;
-    planeX = canvas.width / 2 - planeWidths[planeIndex] / 2;
-    planeY = canvas.height - planeHeight - 10;
-    document.querySelector(".menu").style.display = "none";
-    updateGame();
-  }
-
-  function endGame() {
-    gameRunning = false;
-    document.querySelector(".menu").style.display = "block";
-  }
-
-  function updateGame() {
-    clearCanvas();
-    drawClouds();
-    drawPlane();
-    movePlane();
-    moveClouds();
-    if (gameRunning) {
-      requestAnimationFrame(updateGame);
-    }
-  }
-
-  // Bulut oluşturma
   function createClouds() {
     clouds = [];
-    const cloudCount = 10 * cloudDensity;
+    const cloudCount = 20 * cloudDensity; // Bulut sayısı 2 katına çıkarıldı
     for (let i = 0; i < cloudCount; i++) {
       clouds.push({
         x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height
+        y: Math.random() * canvas.height,
+        isRed: false
       });
     }
+  }
+
+  function createRedCloud() {
+    clouds.push({
+      x: Math.random() * canvas.width,
+      y: 0,
+      isRed: true
+    });
   }
 
   function updateCloudDensity() {
@@ -160,15 +175,8 @@
     createClouds();
   }
 
-  function checkPlaneUpgrade() {
-    // Score sırayla 20, 50, 100 ve 200 olunca ve her 100 artışta uçağın şekli değişir
-    if (score === 20 || score === 50 || score === 100 || score === 200 || (score > 200 && (score - 200) % 100 === 0)) {
-      planeIndex++;
-      if (planeIndex >= planeWidths.length) {
-        planeIndex = planeWidths.length - 1;
-      }
-    }
-  }
+  canvas.width = initialCanvasWidth;
+  canvas.height = initialCanvasHeight;
 
   createClouds();
 
@@ -213,6 +221,35 @@
 
   const cloudDensityRange = document.getElementById("cloudDensityRange");
   cloudDensityRange.addEventListener("input", updateCloudDensity);
+
+  function restartGame() {
+    gameRunning = true;
+    score = 0;
+    planeX = canvas.width / 2 - planeWidth / 2;
+    planeY = canvas.height - planeHeight - 60;
+    document.querySelector(".menu").style.display = "none";
+    updateGame();
+  }
+
+  function endGame() {
+    gameRunning = false;
+    document.querySelector(".menu").style.display = "block";
+  }
+
+  function updateGame() {
+    clearCanvas();
+    drawClouds();
+    drawPlane();
+    movePlane();
+    moveClouds();
+    if (gameRunning) {
+      requestAnimationFrame(updateGame);
+    }
+  }
+
+  setInterval(() => {
+    isMagnetActive = false; // 3 saniye sonra mıknatıs pasif hale gelir
+  }, 3000);
 
   updateGame();
 </script>
